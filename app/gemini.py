@@ -59,17 +59,20 @@ def friendly(exc: BaseException) -> str:
 
 
 class Gemini:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, use_vertex: bool | None = None, label: str = "video"):
         self.settings = settings
-        if settings.api_key:
-            self.client = genai.Client(api_key=settings.api_key)
-            self.vertex = False
-        else:
+        self.label = label
+        if use_vertex is None:
+            use_vertex = not bool(settings.api_key)
+        if use_vertex:
             project = settings.project or _detect_project()
             self.client = genai.Client(
                 vertexai=True, project=project, location=settings.location
             )
             self.vertex = True
+        else:
+            self.client = genai.Client(api_key=settings.api_key)
+            self.vertex = False
         ordered = [settings.model] + [m for m in settings.fallback_models if m != settings.model]
         self.models: list[str] = ordered
         self._idx = 0
@@ -150,3 +153,22 @@ class Gemini:
                     if part.text and not part.thought:
                         pieces.append(part.text)
         return "".join(pieces), last
+
+
+def make_clients(settings: Settings) -> tuple[Gemini, Gemini]:
+    """Return (video_client, search_client).
+
+    With an API key, video understanding goes through the Gemini API (which reads
+    YouTube links directly), while the Google Search grounded checks run on Vertex AI
+    in the Cloud project, unless VERIFY_BACKEND=api.
+    """
+    video = Gemini(settings, label="video")
+    search = video
+    if settings.api_key and settings.verify_backend != "api":
+        project = settings.project or _detect_project()
+        if project:
+            try:
+                search = Gemini(settings, use_vertex=True, label="search")
+            except Exception as exc:  # fall back to the API key for both
+                log.warning("Vertex AI client unavailable for search checks: %s", exc)
+    return video, search

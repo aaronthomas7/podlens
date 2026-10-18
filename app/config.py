@@ -33,7 +33,6 @@ DEFAULT_FALLBACK_MODELS = (
     "gemini-3.6-flash",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
-    "gemini-2.5-flash",
 )
 
 # Bump when prompts or the result shape change, so old cached results are not reused.
@@ -59,6 +58,7 @@ class Settings:
     agentic_long_videos: bool
     long_video_s: int
     thinking_level: str | None
+    verify_backend: str
 
     @property
     def backend(self) -> str:
@@ -93,4 +93,5 @@ def load_settings() -> Settings:
         agentic_long_videos=_bool("AGENTIC_LONG_VIDEOS", True),
         long_video_s=max(120, _int("LONG_VIDEO_SECONDS", 600)),
         thinking_level=_str("THINKING_LEVEL"),
+        verify_backend=(_str("VERIFY_BACKEND", "auto") or "auto").lower(),
     )

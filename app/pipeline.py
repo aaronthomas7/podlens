@@ -45,10 +45,12 @@ def analysis_id_for(key: str) -> str:
 
 
 class Pipeline:
-    def __init__(self, settings: Settings, store: Store, gemini: Gemini | None):
+    def __init__(self, settings: Settings, store: Store, gemini: Gemini | None,
+                 search_gemini: Gemini | None = None):
         self.settings = settings
         self.store = store
         self.gemini = gemini
+        self.search_gemini = search_gemini or gemini
 
     async def run(self, job: Job, video_id: str, start: int | None, end: int | None,
                   language: str, duration: float | None) -> None:
@@ -136,7 +138,7 @@ class Pipeline:
                     if self.settings.mock:
                         result = await mock.verify(claim)
                     else:
-                        result = await verify_claim(self.gemini, claim, ctx, language)
+                        result = await verify_claim(self.search_gemini, claim, ctx, language)
                 except Exception as exc:
                     log.warning("verify failed for %s: %s", claim["id"], exc)
                     result = {

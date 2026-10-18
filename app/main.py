@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import load_settings
-from .gemini import Gemini
+from .gemini import Gemini, make_clients
 from .jobs import JobRegistry
 from .pipeline import LANGUAGES, Pipeline, analysis_id_for, cache_key
 from .ratelimit import RateLimiter
@@ -31,12 +31,13 @@ store = Store(settings)
 jobs = JobRegistry()
 limiter = RateLimiter(settings.rate_per_ip_hour, settings.rate_global_day)
 gemini: Gemini | None = None
+search_gemini: Gemini | None = None
 if not settings.mock:
     try:
-        gemini = Gemini(settings)
+        gemini, search_gemini = make_clients(settings)
     except Exception as exc:  # surface config problems on /healthz instead of crashing
         log.error("Gemini client could not start: %s", exc)
-pipeline = Pipeline(settings, store, gemini)
+pipeline = Pipeline(settings, store, gemini, search_gemini)
 
 app = FastAPI(title="PodLens", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -72,6 +73,7 @@ async def healthz():
         "ok": settings.mock or gemini is not None,
         "backend": settings.backend,
         "model": gemini.model if gemini else ("mock" if settings.mock else None),
+        "search_backend": ("vertex" if search_gemini.vertex else "gemini-api") if search_gemini else None,
         "firestore": store.fs is not None,
         "running_jobs": jobs.running,
     }

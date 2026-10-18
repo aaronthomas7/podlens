@@ -89,7 +89,7 @@ The script enables the APIs, creates a service account with the Vertex AI User a
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Model for both stages; falls back down the list if unavailable |
-| `GEMINI_FALLBACK_MODELS` | 3.8 Flash, 3.6 Flash, 3.5 Flash, 3.5 Flash-Lite, 2.5 Flash | Tried in order on "model not found" |
+| `GEMINI_FALLBACK_MODELS` | 3.8 Flash, 3.6 Flash, 3.5 Flash, 3.5 Flash-Lite | Tried in order on "model not found" |
 | `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` | – / `global` | Vertex AI settings |
 | `GEMINI_API_KEY` | – | Use the Gemini API instead of Vertex AI |
 | `USE_FIRESTORE` | off | Persist results |
