@@ -62,6 +62,12 @@ if ! gcloud firestore databases describe --database="(default)" --project "${PRO
   fi
 fi
 
+EXTRA_ENV=""
+if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+  echo "==> Using a Gemini API key (Gemini Developer API) for model calls"
+  EXTRA_ENV=",GEMINI_API_KEY=${GEMINI_API_KEY}"
+fi
+
 echo "==> Building and deploying (3 to 5 minutes)"
 gcloud run deploy "${SERVICE}" \
   --source . \
@@ -73,7 +79,7 @@ gcloud run deploy "${SERVICE}" \
   --timeout 900 \
   --concurrency 40 \
   --max-instances 3 \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${MODEL},USE_FIRESTORE=${USE_FIRESTORE}" \
+  --update-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${MODEL},USE_FIRESTORE=${USE_FIRESTORE}${EXTRA_ENV}" \
   --quiet
 
 URL="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format 'value(status.url)')"
