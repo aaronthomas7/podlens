@@ -66,6 +66,7 @@ async def index(analysis_id: str | None = None):
 
 
 @app.get("/healthz")
+@app.get("/api/health")
 async def healthz():
     return {
         "ok": settings.mock or gemini is not None,

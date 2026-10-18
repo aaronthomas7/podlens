@@ -80,4 +80,4 @@ URL="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --reg
 echo
 echo "==> Live at: ${URL}"
 echo "==> Health check:"
-curl -fsS "${URL}/healthz" && echo || echo "(not answering yet; try again in a few seconds)"
+curl -fsS "${URL}/api/health" && echo || echo "(not answering yet; try again in a few seconds)"

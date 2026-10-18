@@ -59,24 +59,18 @@ def _resp(text, chunks=()):
 
 
 class FakeModels:
-    def __init__(self, fail_first_model=None):
+    def __init__(self, fail_first_model=None, fail_code=404):
         self.stream_calls = []
         self.calls = []
         self.fail_first_model = fail_first_model
-
-    async def generate_content_stream(self, *, model, contents, config):
-        self.stream_calls.append((model, contents, config))
-        if self.fail_first_model and model == self.fail_first_model:
-            raise errors.APIError(404, {"error": {"code": 404, "message": "model not found", "status": "NOT_FOUND"}})
-        text = json.dumps(EXTRACTION, ensure_ascii=False)
-
-        async def gen():
-            yield _resp(text[: len(text) // 2])
-            yield _resp(text[len(text) // 2 :])
-
-        return gen()
+        self.fail_code = fail_code
 
     async def generate_content(self, *, model, contents, config):
+        if not isinstance(contents, str):  # extraction: video + instruction
+            self.stream_calls.append((model, contents, config))
+            if self.fail_first_model and model == self.fail_first_model:
+                raise errors.APIError(self.fail_code, {"error": {"code": self.fail_code, "message": "boom", "status": "X"}})
+            return _resp(json.dumps(EXTRACTION, ensure_ascii=False))
         self.calls.append((model, contents, config))
         claim_line = contents.splitlines()[0].removeprefix("Claim to check: ")
         text, chunks = VERDICTS[claim_line]
@@ -86,6 +80,10 @@ class FakeModels:
 @pytest.fixture
 def settings():
     return replace(load_settings(), mock=False, api_key="test-key", model="gemini-3.8-flash", use_firestore=False)
+
+
+async def _no_sleep(*_a, **_k):
+    return None
 
 
 def make_gemini(settings, fake):
@@ -149,17 +147,21 @@ def test_full_pipeline_with_fake_gemini(settings, monkeypatch):
     assert _a.run(store.get(a["id"]))["id"] == a["id"]
 
 
-def test_model_fallback_on_404(settings, monkeypatch):
+@pytest.mark.parametrize("code", [404, 500])
+def test_model_fallback(settings, monkeypatch, code):
     async def no_meta(video_id, key=None):
         return {"id": video_id, "url": "u", "title": "T", "author": None, "thumbnail": None, "published_at": None, "duration": None}
 
     monkeypatch.setattr("app.pipeline.fetch_metadata", no_meta)
-    fake = FakeModels(fail_first_model="gemini-3.8-flash")
+    monkeypatch.setattr("app.gemini.asyncio.sleep", _no_sleep)
+    fake = FakeModels(fail_first_model="gemini-3.8-flash", fail_code=code)
     gemini = make_gemini(settings, fake)
     events, _ = run_pipeline(settings, gemini)
     assert events[-1]["type"] == "done"
-    assert gemini.model == "gemini-3.6-flash"
-    assert [c[0] for c in fake.stream_calls] == ["gemini-3.8-flash", "gemini-3.6-flash"]
+    models_used = [c[0] for c in fake.stream_calls]
+    assert models_used[-1] == "gemini-3.6-flash" and models_used[0] == "gemini-3.8-flash"
+    # 404 drops the model for good; a server error only skips it for that call
+    assert gemini.model == ("gemini-3.6-flash" if code == 404 else "gemini-3.8-flash")
 
 
 def test_plan_window_cases(settings):

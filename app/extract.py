@@ -201,7 +201,11 @@ async def extract_claims(gemini: Gemini, settings: Settings, video_id: str, wind
 
     async def run(model: str, win: dict) -> ExtractionResult:
         contents = types.Content(role="user", parts=[_video_part(video_id, win), types.Part(text=_instruction(win))])
-        text, last = await gemini.stream_text(model=model, contents=contents, config=build_config())
+        last = await gemini.client.aio.models.generate_content(model=model, contents=contents, config=build_config())
+        try:
+            text = last.text or ""
+        except Exception:
+            text = ""
         if not text.strip():
             reason = None
             if last is not None and last.candidates:

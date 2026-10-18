@@ -89,14 +89,33 @@ class Gemini:
                 return True
             return False
 
-    async def call(self, fn: Callable[[str], Awaitable[T]], *, attempts: int = 3) -> T:
-        """Run fn(model) with retries on transient errors and fallback on missing models."""
+    async def call(self, fn: Callable[[str], Awaitable[T]], *, attempts: int = 2) -> T:
+        """Run fn(model) with retries on transient errors.
+
+        A model that is missing (404) is dropped for good. A model that keeps failing
+        with server errors is skipped for this call only, and the next model is tried.
+        """
+        tried: set[str] = set()
+        last_exc: Exception | None = None
         while True:
-            model = self.model
+            remaining = [m for m in self.models[self._idx :] if m not in tried]
+            if not remaining:
+                if last_exc:
+                    raise last_exc
+                raise FriendlyError("No Gemini model is available right now. Please try again.")
+            current = remaining[0]
+            tried.add(current)
             try:
-                return await self._with_retries(fn, model, attempts)
+                return await self._with_retries(fn, current, attempts)
             except errors.APIError as exc:
-                if getattr(exc, "code", None) == 404 and await self._advance_from(model):
+                last_exc = exc
+                code = getattr(exc, "code", None)
+                log.warning("Gemini call failed on %s (%s): %s", current, code, getattr(exc, "message", exc))
+                if code == 404:
+                    if current == self.model:
+                        await self._advance_from(current)
+                    continue
+                if code in RETRYABLE:
                     continue
                 raise
 
@@ -109,7 +128,7 @@ class Gemini:
                 code = getattr(exc, "code", None)
                 if code in RETRYABLE and attempt < attempts:
                     wait = delay + random.uniform(0, delay / 2)
-                    log.info("Gemini %s on %s, retrying in %.1fs", code, model, wait)
+                    log.info("Gemini %s on %s, retrying in %.1fs: %s", code, model, wait, getattr(exc, "message", exc))
                     await asyncio.sleep(wait)
                     delay *= 2.5
                     continue
